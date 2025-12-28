@@ -76,7 +76,15 @@ def get_espn_schedule():
                 status = event.get('status', {}).get('type', {}).get('state')
                 if status == 'post': continue # Ohitetaan pelatut
                 
-                competitors = event.get('competitions', [])[0].get('competitors', [])
+                # --- KORJAUS: Turvatarkistus ---
+                competitions = event.get('competitions', [])
+                if not competitions: 
+                    # Jos lista on tyhjä, hypätään yli (estää index out of range -virheen)
+                    continue 
+                
+                competitors = competitions[0].get('competitors', [])
+                # -------------------------------
+
                 if len(competitors) != 2: continue
                 
                 p1 = competitors[0]
@@ -87,8 +95,6 @@ def get_espn_schedule():
                 tourney_name = event.get('season', {}).get('slug', 'Unknown')
                 
                 # Yritetään kaivaa alusta (Surface)
-                # ESPN ei aina anna tätä suoraan, joten käytetään oletusta tai logiikkaa
-                # Tässä paranneltu logiikka: Jos "clay" on nimessä -> Clay, muuten Hard
                 surface = "Hard"
                 if "clay" in tourney_name.lower(): surface = "Clay"
                 elif "grass" in tourney_name.lower(): surface = "Grass"
@@ -104,18 +110,17 @@ def get_espn_schedule():
                 })
                 valid_games_found = True
             
-            # Jos tältä päivältä löytyi tulevia pelejä, palautetaan ne heti
             if valid_games_found:
                 print(f"   -> Found {len(matches)} matches on {display_date}!")
                 return matches
                 
         except Exception as e:
-            print(f"      ! Error checking {display_date}: {e}")
+            # Tulostetaan virhe, mutta ei kaaduta (continue jatkaa seuraavaan päivään)
+            print(f"      ! Warning checking {display_date}: {e}")
             continue
     
     print("   -> No upcoming matches found in the next 14 days.")
     return []
-
 # ========================================================
 # 2. FEATURE ENGINEERING
 # ========================================================
@@ -476,3 +481,4 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
 
     app.run(host='0.0.0.0', port=port)
+
