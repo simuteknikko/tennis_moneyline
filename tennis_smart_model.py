@@ -51,51 +51,70 @@ def get_atp_data():
     return full_data
 
 def get_espn_schedule():
-    """Hakee ATP-otteluohjelman ESPN API:sta."""
-    print("Step 2: Fetching Schedule (ESPN API)...")
-    url = "http://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard"
+    """Hakee ATP-otteluohjelman. Etsii seuraavat 14 päivää, kunnes löytää pelejä."""
+    print("Step 2: Fetching Schedule (Smart Scan)...")
+    base_url = "http://site.api.espn.com/apis/site/v2/sports/tennis/atp/scoreboard"
     
-    try:
-        resp = requests.get(url).json()
-        matches = []
+    # Etsitään max 14 päivää eteenpäin
+    for i in range(14):
+        search_date = datetime.now() + timedelta(days=i)
+        date_str = search_date.strftime("%Y%m%d")
+        display_date = search_date.strftime("%Y-%m-%d")
         
-        events = resp.get('events', [])
-        for event in events:
-            status = event.get('status', {}).get('type', {}).get('state')
-            if status == 'post': continue # Ohitetaan pelatut
-            
-            competitors = event.get('competitions', [])[0].get('competitors', [])
-            if len(competitors) != 2: continue
-            
-            p1 = competitors[0]
-            p2 = competitors[1]
-            
-            # Tournament Info
-            season = event.get('season', {}).get('year')
-            tourney_name = event.get('season', {}).get('slug', 'Unknown')
-            
-            # Surface Logic (ESPN ei aina kerro alustaa suoraan, arvataan turnauksen nimestä tai defaultataan Hard)
-            # SPECS 2.0 vaatii alustan. Jos API ei anna, käytetään geneeristä logiikkaa.
-            # Tässä yksinkertaistettu:
-            surface = "Hard" # Oletus
-            # Huom: Oikeassa tuotannossa tarvitaan mappaus turnauksen nimestä alustaan
-            
-            matches.append({
-                'date': event.get('date'),
-                'tournament': tourney_name,
-                'surface': surface,
-                'p1_name': p1['team']['displayName'],
-                'p2_name': p2['team']['displayName'],
-                'p1_id': p1.get('id'), # ESPN ID (ei sama kuin Sackmann)
-                'p2_id': p2.get('id')
-            })
-            
-        print(f"   -> Found {len(matches)} upcoming matches.")
-        return matches
+        # ESPN API:lle annetaan päivämäärä parametrina ?dates=YYYYMMDD
+        url = f"{base_url}?dates={date_str}"
         
-    except Exception as e:
-        print(f"   -> Error fetching schedule: {e}")
-        return []
+        try:
+            print(f"   -> Checking date: {display_date}...")
+            resp = requests.get(url).json()
+            events = resp.get('events', [])
+            
+            matches = []
+            valid_games_found = False
+
+            for event in events:
+                status = event.get('status', {}).get('type', {}).get('state')
+                if status == 'post': continue # Ohitetaan pelatut
+                
+                competitors = event.get('competitions', [])[0].get('competitors', [])
+                if len(competitors) != 2: continue
+                
+                p1 = competitors[0]
+                p2 = competitors[1]
+                
+                # Tournament Info
+                season = event.get('season', {}).get('year')
+                tourney_name = event.get('season', {}).get('slug', 'Unknown')
+                
+                # Yritetään kaivaa alusta (Surface)
+                # ESPN ei aina anna tätä suoraan, joten käytetään oletusta tai logiikkaa
+                # Tässä paranneltu logiikka: Jos "clay" on nimessä -> Clay, muuten Hard
+                surface = "Hard"
+                if "clay" in tourney_name.lower(): surface = "Clay"
+                elif "grass" in tourney_name.lower(): surface = "Grass"
+                
+                matches.append({
+                    'date': event.get('date'),
+                    'tournament': tourney_name,
+                    'surface': surface,
+                    'p1_name': p1['team']['displayName'],
+                    'p2_name': p2['team']['displayName'],
+                    'p1_id': p1.get('id'),
+                    'p2_id': p2.get('id')
+                })
+                valid_games_found = True
+            
+            # Jos tältä päivältä löytyi tulevia pelejä, palautetaan ne heti
+            if valid_games_found:
+                print(f"   -> Found {len(matches)} matches on {display_date}!")
+                return matches
+                
+        except Exception as e:
+            print(f"      ! Error checking {display_date}: {e}")
+            continue
+    
+    print("   -> No upcoming matches found in the next 14 days.")
+    return []
 
 # ========================================================
 # 2. FEATURE ENGINEERING
@@ -455,4 +474,5 @@ def trigger_run():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
+
     app.run(host='0.0.0.0', port=port)
