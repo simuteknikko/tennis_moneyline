@@ -28,19 +28,28 @@ SACKMANN_BASE_URL = "https://raw.githubusercontent.com/Tennismylife/TML-Database
 # ========================================================
 
 def get_atp_data():
-    """Lataa ja yhdistää kuluvan ja edellisen vuoden datan Jeff Sackmannin reposta."""
-    print("Step 1: Downloading Historical Data (Sackmann Repo)...")
+    """Lataa ja yhdistää kuluvan ja edellisen vuoden datan (TML-Repo format)."""
+    print("Step 1: Downloading Historical Data (Tennismylife Repo)...")
     current_year = datetime.now().year
+    # Haetaan 2024 ja 2025
     years = [current_year - 1, current_year]
     
     frames = []
     for y in years:
-        url = f"{SACKMANN_BASE_URL}/atp_matches_{y}.csv"
+        # KORJAUS: Tennismylife-repo käyttää tiedostonimeä "2025.csv", ei "atp_matches_2025.csv"
+        url = f"{SACKMANN_BASE_URL}/{y}.csv"
         try:
-            print(f"   -> Fetching {y} data...")
-            df = pd.read_csv(url)
-            df['tourney_date'] = pd.to_datetime(df['tourney_date'], format='%Y%m%d', errors='coerce')
-            frames.append(df)
+            print(f"   -> Fetching {y} data from {url}...")
+            # Lisätään timeout ja virheenkäsittely
+            df = pd.read_csv(url, on_bad_lines='skip', encoding='ISO-8859-1')
+            
+            # Varmistetaan että päivämäärät luetaan oikein
+            if 'tourney_date' in df.columns:
+                df['tourney_date'] = pd.to_datetime(df['tourney_date'], format='%Y%m%d', errors='coerce')
+                frames.append(df)
+            else:
+                print(f"      ! Warning: 'tourney_date' column missing in {y} data.")
+                
         except Exception as e:
             print(f"      ! Warning: Could not fetch {y} data: {e}")
     
@@ -481,5 +490,6 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
 
     app.run(host='0.0.0.0', port=port)
+
 
 
